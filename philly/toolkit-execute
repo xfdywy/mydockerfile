@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# This script will read in values from the command line (supplied by the Philly Cluster)
+# and send them as arguments to a python/bash file that will run with the other arguments.
+# The python/bash file to be run is given as the configFile argument to this script.
+# The python/bash file should accept the standard arguments (dataDir, logDir, modelDir) and set variables accordingly
+# extra arguments provided in philly are also sent as extra arguments to the python/bash script
+# current version of the script does not support multi-GPU and only sends --gpu 0 as an argument to the python/bash file
+
+set -x
+CONFIG_FILE=NONE
+DATA_DIR=NONE
+LOG_DIR=$PWD
+MODEL_DIR=NONE
+PREV_MODEL_PATH=NONE
+IS_MEMCHECK=false
+EXTRA_ARGS=""
+NUM_GPU=NONE
+STDOUT_DIR=$PWD
+IS_DEBUG=false
+IS_PERF_TRACE=false
+IS_GDB_WRAPPED=false
+GPU=0
+
+# parsing command line arguments:
+while [[ $# > 0 ]]
+do
+key="$1"
+
+case $key in
+    -h|--help)
+    echo "Usage: toolkit-execute [run_options]"
+    echo "Options:"
+    echo "  -n|--nGPU <num> - how many GPUs used for this job (default NONE)"
+    echo "  -c|--configFile <config> - which configuration file to use (default NONE)"
+    echo "  -d|--dataDir <path> - directory path to input files (default NONE)"
+    echo "  -l|--logDir <path> - directory path to save the log files (default \$PWD)"
+    echo "  -m|--modelDir <path> - directory path to save the model files (default NONE)"
+    echo "  -s|--stdoutDir <path> - directory path to save the stdout (default \$PWD)"
+    echo "  --debug - job is in debug mode (not used)"
+    echo "  --perfTrace - job should run in perf trace mode (not used)"
+    echo "  --gdbWrapped - job should run with GDB (default FALSE)"
+    echo "  --prevModelDir - the prev model path to copy from (default None)"
+    echo "  --memCheck - start job in memcheck mode (default FALSE)"
+    exit 1
+    ;;
+    -n|--nGPU)
+    NUM_GPU="$2"
+    shift # pass argument
+    ;;
+    -c|--configFile)
+    CONFIG_FILE="$2"
+    shift # pass argument
+    ;;
+    -d|--dataDir)
+    DATA_DIR="$2"
+    shift # pass argument
+    ;;
+    -l|--logDir)
+    LOG_DIR="$2"
+    shift # pass argument
+    ;;
+    -m|--modelDir)
+    MODEL_DIR="$2"
+    shift # pass argument
+    ;;
+    -s|--stdoutDir)
+    STDOUT_DIR="$2"
+    shift # pass argument
+    ;;
+    --debug)
+    IS_DEBUG=true
+    ;;
+    --perfTrace)
+    IS_PERF_TRACE=true
+    ;;
+    --gdbWrapped)
+    IS_GDB_WRAPPED=true
+    ;;
+    --prevModelDir)
+    PREV_MODEL_PATH="$2"
+    shift # pass argument
+    ;;
+    --memCheck)
+    IS_MEMCHECK=TRUE
+    ;;
+    *)
+    EXTRA_ARGS="$EXTRA_ARGS $1"
+    ;;
+esac
+shift # past argument or value
+done
+
+echo "toolkit-execute: NUM_GPU=$NUM_GPU"
+echo "toolkit-execute: CONFIG_FILE=$CONFIG_FILE"
+echo "toolkit-execute: DATA_DIR=$DATA_DIR"
+echo "toolkit-execute: LOG_DIR=$LOG_DIR"
+echo "toolkit-execute: MODEL_DIR=$MODEL_DIR"
+echo "toolkit-execute: STDOUT_DIR=$STDOUT_DIR"
+echo "toolkit-execute: IS_DEBUG=$IS_DEBUG"
+echo "toolkit-execute: IS_PERF_TRACE=$IS_PERF_TRACE"
+echo "toolkit-execute: IS_GDB_WRAPPED=$IS_GDB_WRAPPED"
+echo "toolkit-execute: PREV_MODEL_PATH=$PREV_MODEL_PATH"
+echo "toolkit-execute: IS_MEMCHECK=$IS_MEMCHECK"
+echo "toolkit-execute: EXTRA_ARGS=$EXTRA_ARGS"
+
+CONFIGB=$(basename "$CONFIG_FILE")
+CONFIG_DIR=$(dirname "$CONFIG_FILE")
+CONFIG_EXT="${CONFIGB##*.}"
+CONFIG_NAME="${CONFIGB%.*}"
+if [[ ${CONFIG_EXT} == "py" ]] ; then
+    cd ${CONFIG_DIR} && python ${CONFIGB} --gpu ${GPU} --dataDir ${DATA_DIR} --modelDir ${MODEL_DIR} --logDir ${LOG_DIR} ${EXTRA_ARGS} || exit 1
+else
+    cmd="${CONFIG_FILE} --gpu ${GPU} --dataDir ${DATA_DIR} --modelDir ${MODEL_DIR} --logDir ${LOG_DIR} ${EXTRA_ARGS}"
+    ${cmd} || exit 1
+fi
