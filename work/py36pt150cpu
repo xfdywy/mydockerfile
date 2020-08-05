@@ -1,0 +1,97 @@
+FROM   ubuntu:16.04
+
+LABEL description="This cpu docker for rl exp" \
+      lepository="" \
+      tag="py36pt15cpu" \
+      creator="yuewang"   
+# Everything above this line is required for the docker.
+# Add your personalized features below here.
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+         git \
+         ca-certificates \
+         libjpeg-dev \
+         libboost-all-dev\
+         libsdl2-dev\
+         libgl1-mesa-dev\
+         swig\
+         vim\
+         tmux\
+         htop\
+         xorg-dev\
+         unzip\
+         cmake zlib1g-dev libjpeg-dev xvfb libav-tools \
+         libpng-dev curl wget &&\
+         rm -rf /var/lib/apt/lists/*
+
+ENV PYTHON_VERSION=3.6
+ 
+RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh  -O ~/miniconda.sh    && \
+     chmod +x ~/miniconda.sh && \
+     ~/miniconda.sh -b -p /opt/conda && \
+     rm ~/miniconda.sh && \
+     /opt/conda/bin/conda create -y --name pytorch-py$PYTHON_VERSION python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl&& \
+     /opt/conda/bin/conda clean -ya
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+
+RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION  pytorch=1.5.0 torchvision==0.6.0  cpuonly  -c pytorch  && \
+    /opt/conda/bin/conda clean -ya
+
+RUN pip install h5py keras future chainer  
+
+RUN pip install  gym  && \
+    pip install  gym[atari]  && \
+    pip install opencv-python && \
+    pip install tqdm   && \
+    pip install tensorboardX pytz logger matplotlib scikit-image
+
+
+
+Run     /opt/conda/bin/conda install pybox2d -c conda-forge 
+
+WORKDIR /opt
+ 
+ 
+
+
+RUN   pip install pandas tensorflow    roboschool
+WORKDIR /opt
+RUN git clone https://github.com/openai/baselines.git \
+&& cd baselines \
+&& pip install -e .
+
+ 
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+WORKDIR /workspace
+RUN chmod -R a+w /workspace
+
+
+ENV LANG C.UTF-8
+ 
+
+RUN pip  install pybullet --upgrade  
+
+RUN apt-get update && apt-get install -y openssh-server
+ 
+RUN mkdir /var/run/sshd
+RUN echo 'root:root' | chpasswd
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+
+RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
+
+EXPOSE 22
+ 
+COPY run.sh  /workspace
+
+ENTRYPOINT bash /workspace/run.sh && bash
+
+
+ 
