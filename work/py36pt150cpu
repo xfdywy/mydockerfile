@@ -87,6 +87,8 @@ RUN echo "export VISIBLE=now" >> /etc/profile
 
 RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
 
+RUN echo "export PATH=$PATH:/opt/conda/bin/" >> /etc/profile
+ENV PATH $PATH:/opt/conda/bin
 EXPOSE 22
  
 COPY run.sh  /workspace
