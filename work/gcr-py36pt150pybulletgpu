@@ -1,0 +1,137 @@
+FROM phillyregistry.azurecr.io/philly/jobs/base/philly-openmpi:4.0.0-ubuntu.18.04-cuda.10.1-cudnn.7
+
+# Copy the files to the necessary folder
+COPY toolkit-execute /home/job/toolkit-execute
+RUN chmod u+x /home/job/toolkit-execute
+
+# Labels for the docker
+LABEL description="This docker has pytorch 1.5.0, gym[atari], pytorchvision opencv in anaconda python36 with cuda 10.1, and cudnn 7.0." \
+      lepository="philly/jobs/custom/pytorch" \
+      tag="py36pt041all" \
+      creator="v-yuewng" tooltype="pytorch" \
+      tooltypeversion="1.0.1" \
+      createtime="4/22/2019"
+# Everything above this line is required for the docker.
+# Add your personalized features below here.
+
+RUN apt update && apt  install  -y --allow-change-held-packages --no-install-recommends \
+         git \
+         ca-certificates \
+         libnccl2 \
+         libnccl-dev \
+         libjpeg-dev \
+         libboost-all-dev\
+         libsdl2-dev\
+         libgl1-mesa-dev\
+         swig\
+         vim\
+         tmux\
+         htop\
+         xorg-dev\
+         unzip\
+         cmake zlib1g-dev libjpeg-dev xvfb libosmesa6-dev\
+         libpng-dev curl wget &&\
+         rm -rf /var/lib/apt/lists/*
+
+ENV PYTHON_VERSION=3.6
+
+RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh  -O ~/miniconda.sh    && \
+     chmod +x ~/miniconda.sh && \
+     ~/miniconda.sh -b -p /opt/conda && \
+     rm ~/miniconda.sh && \
+     /opt/conda/bin/conda create -y --name pytorch-py$PYTHON_VERSION python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl&& \
+     /opt/conda/bin/conda clean -ya
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+
+RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION pytorch torchvision cudatoolkit=10.1 -c pytorch  && \
+    /opt/conda/bin/conda clean -ya
+
+RUN pip install h5py keras future chainer cupy
+
+RUN pip install  gym  && \
+    pip install  gym[atari]  && \
+    pip install opencv-python && \ 
+    pip install tqdm   && \
+    pip install tensorboardX pytz logger matplotlib scikit-image
+
+
+
+Run pip uninstall -y  Box2D-kengz ; \  
+    git clone https://github.com/pybox2d/pybox2d.git && \ 
+    cd pybox2d && ls && \ 
+    python setup.py build && \ 
+    python setup.py install && \ 
+    cd .. && rm -rf pybox2d  
+
+ 
+
+ENV ROBOSCHOOL_PATH /opt/roboschool  
+
+RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION -c conda-forge boost &&\
+    /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION  -c flyem-forge assimp &&\
+    /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION -c conda-forge pyqt ffmpeg
+
+ 
+ 
+
+RUN   pip install pandas tensorflow-gpu   roboschool
+WORKDIR /opt
+RUN git clone https://github.com/openai/baselines.git \
+&& cd baselines \
+&& pip install -e .
+
+RUN pip install gym[atari]   scikit-image mpi4py
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+WORKDIR /workspace
+RUN chmod -R a+w /workspace
+
+ 
+RUN pip install git+https://github.com/takuseno/d4rl-pybullet && pip install pybullet 
+
+
+
+
+
+RUN apt-get update && apt-get install -y openssh-server
+ 
+RUN mkdir /var/run/sshd
+RUN echo 'root:root' | chpasswd
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+ 
+RUN echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+
+RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
+
+RUN echo "export PATH=$PATH:/opt/conda/bin/" >> /etc/profile
+
+COPY run.sh  /workspace/run.sh
+
+
+RUN apt update && apt  install  -y --allow-change-held-packages --no-install-recommends \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common   &&\
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - &&\
+    sudo add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable" &&\
+   apt-get update &&\
+    apt-get install -y --allow-change-held-packages --no-install-recommends  docker-ce docker-ce-cli containerd.io &&\
+         rm -rf /var/lib/apt/lists/*
+
+RUN wget https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb && \
+        sudo dpkg -i packages-microsoft-prod.deb  &&\
+        sudo apt-get update &&  apt-get -y --allow-change-held-packages --no-install-recommends   install blobfuse &&  rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT bash /workspace/run.sh && bash
