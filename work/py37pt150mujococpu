@@ -1,0 +1,210 @@
+# Tag: nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+# Environment variables
+ENV STAGE_DIR=/root/gpu/install \
+    CUDNN_DIR=/usr/local/cudnn \
+    CUDA_DIR=/usr/local/cuda-10.1 \
+    OPENMPI_VERSIONBASE=1.10
+ENV OPENMPI_VERSION=${OPENMPI_VERSIONBASE}.3
+ENV OPENMPI_STRING=openmpi-${OPENMPI_VERSION} \
+    OFED_VERSION=4.2-1.2.0.0
+
+RUN mkdir -p $STAGE_DIR
+
+RUN apt-get -y update && \
+    apt-get -y install \
+      build-essential \
+      autotools-dev \
+      rsync \
+      curl \
+      wget \
+      jq \
+      openssh-server \
+      openssh-client \
+    # No longer in 'minimal set of packages'
+      sudo \
+    # Needed by OpenMPI
+      cmake \
+      g++ \
+      gcc \
+    # ifconfig
+      net-tools && \
+    apt-get autoremove
+
+WORKDIR $STAGE_DIR
+
+# Install Mellanox OFED user-mode drivers and its prereqs
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y --no-install-recommends \
+    # For MLNX OFED
+        dnsutils \
+        pciutils \
+        ethtool \
+        lsof \
+        python-libxml2 \
+        quilt \
+        libltdl-dev \
+        dpatch \
+        autotools-dev \
+        graphviz \
+        autoconf \
+        chrpath \
+        swig \
+        automake \
+        libgfortran3 \
+        tcl \
+        libnl-3-200 \
+        libnl-route-3-200 \
+        libnl-route-3-dev \
+        libnl-utils \
+        gfortran \
+        tk \
+        bison \
+        flex \
+        libnuma1 \
+        checkinstall && \
+    apt-get -y autoremove && \
+    rm -rf /var/lib/apt/lists/* && \
+    # libnl1 is not available in ubuntu16 so build from source
+    wget -q -O - http://www.infradead.org/~tgr/libnl/files/libnl-1.1.4.tar.gz | tar xzf - && \
+    cd libnl-1.1.4 && \
+    ./configure && \
+    make && \
+    checkinstall -D --showinstall=no --install=yes -y -pkgname=libnl1 -A amd64 && \
+    cd .. && \
+    rm -rf libnl-1.1.4 && \
+    wget -q -O - http://www.mellanox.com/downloads/ofed/MLNX_OFED-$OFED_VERSION/MLNX_OFED_LINUX-$OFED_VERSION-ubuntu16.04-x86_64.tgz | tar xzf - && \
+    cd MLNX_OFED_LINUX-$OFED_VERSION-ubuntu16.04-x86_64/DEBS && \
+    for dep in libibverbs1 libibverbs-dev ibverbs-utils libmlx4-1 libmlx5-1 librdmacm1 librdmacm-dev libibumad libibumad-devel libibmad libibmad-devel; do \
+        dpkg -i $dep\_*_amd64.deb; \
+    done && \
+    cd ../.. && \
+    rm -rf MLNX_OFED_LINUX-*
+
+##################### OPENMPI #####################
+
+RUN wget -q -O - https://www.open-mpi.org/software/ompi/v${OPENMPI_VERSIONBASE}/downloads/${OPENMPI_STRING}.tar.gz | tar -xzf - && \
+    cd ${OPENMPI_STRING} && \
+    ./configure --prefix=/usr/local/${OPENMPI_STRING} && \
+    make -j"$(nproc)" install && \
+    rm -rf $STAGE_DIR/${OPENMPI_STRING} && \
+    ln -s /usr/local/${OPENMPI_STRING} /usr/local/mpi && \
+    # Sanity check:
+    test -f /usr/local/mpi/bin/mpic++
+
+# Update environment variables
+ENV PATH=/usr/local/mpi/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/mpi/lib:/usr/local/mpi/lib64:$LD_LIBRARY_PATH
+
+
+
+
+
+LABEL description="This gpu docker for rl exp" \
+      lepository="" \
+      tag="py37pt15gpu" \
+      creator="yuewang"   
+# Everything above this line is required for the docker.
+# Add your personalized features below here.
+
+RUN apt update && apt  install  -y --allow-change-held-packages --no-install-recommends \
+         git \
+         ca-certificates \
+         libnccl2 \
+         libnccl-dev \
+         libjpeg-dev \
+         libboost-all-dev\
+         libsdl2-dev\
+         libgl1-mesa-dev\
+         swig\
+         vim\
+         tmux\
+         htop\
+         xorg-dev\
+         unzip\
+         cmake zlib1g-dev libjpeg-dev xvfb libosmesa6-dev\
+         libpng-dev curl wget &&\
+         rm -rf /var/lib/apt/lists/*
+
+ENV PYTHON_VERSION=3.7
+ 
+RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh  -O ~/miniconda.sh    && \
+     chmod +x ~/miniconda.sh && \
+     ~/miniconda.sh -b -p /opt/conda && \
+     rm ~/miniconda.sh && \
+     /opt/conda/bin/conda create -y --name pytorch-py$PYTHON_VERSION python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl&& \
+     /opt/conda/bin/conda clean -ya
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+
+RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION  pytorch=1.5.0 torchvision==0.6.0  cpuonly   -c pytorch  && \
+    /opt/conda/bin/conda clean -ya
+
+RUN pip install h5py keras future chainer  
+
+RUN pip install  gym  && \
+    pip install  gym[atari]  && \
+    pip install opencv-python && \
+    pip install tqdm   && \
+    pip install tensorboardX pytz logger matplotlib scikit-image
+
+
+
+Run     /opt/conda/bin/conda install pybox2d -c conda-forge 
+
+WORKDIR /opt
+ 
+ 
+
+
+RUN   pip install pandas tensorflow    roboschool
+WORKDIR /opt
+RUN git clone https://github.com/openai/baselines.git \
+&& cd baselines \
+&& pip install -e .
+
+ 
+
+ENV PATH /opt/conda/envs/pytorch-py$PYTHON_VERSION/bin:$PATH
+WORKDIR /workspace
+RUN chmod -R a+w /workspace
+
+
+ENV LANG C.UTF-8
+ 
+
+RUN pip  install pybullet --upgrade  
+
+RUN apt-get update && apt-get install -y openssh-server
+ 
+RUN mkdir /var/run/sshd
+RUN echo 'root:root' | chpasswd
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+
+RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
+
+RUN echo "export PATH=$PATH:/opt/conda/bin/" >> /etc/profile
+
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /etc/profile
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /root/.bashrc
+RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION patchelf
+
+RUN wget "https://msramlstorage1.blob.core.windows.net/yuewang/data/mujoco.tar?sp=r&st=2020-09-14T13:01:33Z&se=2099-06-29T21:01:33Z&spr=https,http&sv=2019-12-12&sr=b&sig=1xbPid8dhCa45igtl%2FYfX%2F9ec6mVsXneImv7gPLrmDQ%3D" -O mujoco.tar  && tar -xvf mujoco.tar && mv .mujoco /root/.mujoco
+
+RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin &&  pip install mujoco-py==1.50.1.68  && pip install git+https://github.com/rail-berkeley/d4rl@master#egg=d4rl && pip install git+https://github.com/takuseno/d4rl-pybullet && pip install pybullet 
+
+
+
+ENV PATH $PATH:/opt/conda/bin
+EXPOSE 22
+ 
+RUN wget "https://msramlstorage1.blob.core.windows.net/yuewang/data/run.sh?sp=r&st=2020-09-14T13:37:06Z&se=2099-09-14T21:37:06Z&spr=https,http&sv=2019-12-12&sr=b&sig=uog7tRpmb7jnY%2BZf6O%2BjMG4oufOQToqe2PkPKRvV6eQ%3D" -O /workspace/run.sh  
+
+ENTRYPOINT bash /workspace/run.sh && bash
