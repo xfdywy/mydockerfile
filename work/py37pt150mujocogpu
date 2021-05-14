@@ -147,7 +147,7 @@ RUN pip install  gym  && \
     pip install  gym[atari]  && \
     pip install opencv-python && \
     pip install tqdm   && \
-    pip install tensorboardX pytz logger matplotlib scikit-image
+    pip install   pytz logger matplotlib scikit-image
 
 
 
@@ -158,11 +158,7 @@ WORKDIR /opt
  
 
 
-RUN   pip install pandas tensorflow    roboschool
-WORKDIR /opt
-RUN git clone https://github.com/openai/baselines.git \
-&& cd baselines \
-&& pip install -e .
+
 
  
 
@@ -183,28 +179,74 @@ RUN echo 'root:root' | chpasswd
 RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
 # SSH login fix. Otherwise user is kicked off after login
-RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+# RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 ENV NOTVISIBLE "in users profile"
 RUN echo "export VISIBLE=now" >> /etc/profile
 
-RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
+# RUN echo "export $(cat /proc/1/environ |tr '\0' '\n' | xargs)" >> /etc/profile
 
 RUN echo "export PATH=$PATH:/opt/conda/bin/" >> /etc/profile
 
-RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /etc/profile
-RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /root/.bashrc
+# RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /etc/profile
+# RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin" >> /root/.bashrc
 RUN /opt/conda/bin/conda install --name pytorch-py$PYTHON_VERSION patchelf
 
-RUN wget "https://msramlstorage1.blob.core.windows.net/yuewang/data/mujoco.tar?sp=r&st=2020-09-14T13:01:33Z&se=2099-06-29T21:01:33Z&spr=https,http&sv=2019-12-12&sr=b&sig=1xbPid8dhCa45igtl%2FYfX%2F9ec6mVsXneImv7gPLrmDQ%3D" -O mujoco.tar  && tar -xvf mujoco.tar && mv .mujoco /root/.mujoco
-
-RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/.mujoco/mjpro150/bin &&  pip install mujoco-py==1.50.1.68  && pip install git+https://github.com/rail-berkeley/d4rl@master#egg=d4rl && pip install git+https://github.com/takuseno/d4rl-pybullet && pip install pybullet 
-
-
-
+RUN wget "https://msramlstorage1.blob.core.windows.net/yuewang/data/mujoco.tar?sp=r&st=2020-09-14T13:01:33Z&se=2099-06-29T21:01:33Z&spr=https,http&sv=2019-12-12&sr=b&sig=1xbPid8dhCa45igtl%2FYfX%2F9ec6mVsXneImv7gPLrmDQ%3D" -O mujoco.tar  && tar -xvf mujoco.tar 
+#&& cp -r .mujoco /root/.mujoco
+ 
 ENV PATH $PATH:/opt/conda/bin
 EXPOSE 22
  
 RUN wget "https://msramlstorage1.blob.core.windows.net/yuewang/data/run.sh?sp=r&st=2020-09-14T13:37:06Z&se=2099-09-14T21:37:06Z&spr=https,http&sv=2019-12-12&sr=b&sig=uog7tRpmb7jnY%2BZf6O%2BjMG4oufOQToqe2PkPKRvV6eQ%3D" -O /workspace/run.sh  
 
+
+
+ENV  LD_LIBRARY_PATH /workspace/.mujoco/mjpro150/bin:$LD_LIBRARY_PATH
+ENV  MUJOCO_PY_MJPRO_PATH /workspace/.mujoco/mjpro150/
+ENV  MUJOCO_PY_MJKEY_PATH /workspace/.mujoco/mjkey.txt
+ENV  MJKEY_PATH /workspace/.mujoco/mjkey.txt
+ENV  MJLIB_PATH /workspace/.mujoco/mujoco200_linux/bin/libmujoco200.so
+
+
+RUN   pip install pandas roboschool tensorflow==1.14
+WORKDIR /opt
+RUN git clone https://github.com/openai/baselines.git \
+&& cd baselines \
+&& pip install -e .
+
+
+
+
+
+
+RUN echo "export LD_LIBRARY_PATH=/workspace/.mujoco/mjpro150/bin:$LD_LIBRARY_PATH" >> /etc/profile
+RUN echo "export MUJOCO_PY_MJPRO_PATH=/workspace/.mujoco/mjpro150/" >> /etc/profile
+RUN echo "export MJLIB_PATH=/workspace/.mujoco/mujoco200_linux/bin/libmujoco200.so" >> /etc/profile
+RUN echo "export MUJOCO_PY_MJKEY_PATH=/workspace/.mujoco/mjkey.txt" >> /etc/profile
+RUN echo "export MJKEY_PATH=/workspace/.mujoco/mjkey.txt" >> /etc/profile
+
+RUN pip install dm_control
+
+
+# RUN export LD_LIBRARY_PATH=/workspace/.mujoco/mjpro150/bin:$LD_LIBRARY_PATH && 
+RUN pip install mujoco-py==1.50.1.68 
+# RUN echo $LD_LIBRARY_PATH && echo $MJLIB_PATH
+RUN   pip install git+https://github.com/xfdywy/d4rl.git@master#egg=d4rl 
+# && pip install git+https://github.com/takuseno/d4rl-pybullet && pip install pybullet 
+
+
+ENV PATH $PATH:/opt/conda/bin
+
+
+RUN apt update && apt  install  -y --allow-change-held-packages --no-install-recommends \
+        libglew-dev libglfw3-dev && \
+         rm -rf /var/lib/apt/lists/*
+
+RUN chmod -R 777 /workspace
+RUN chmod -R 777 /opt
+
 ENTRYPOINT bash /workspace/run.sh && bash
+
+
+
